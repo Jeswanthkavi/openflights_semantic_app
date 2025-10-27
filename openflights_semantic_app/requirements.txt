@@ -1,0 +1,6 @@
+flask
+flask-cors
+mariadb
+sentence-transformers
+pandas
+python-dotenv
