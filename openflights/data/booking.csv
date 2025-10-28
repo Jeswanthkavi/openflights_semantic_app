@@ -1,0 +1,5 @@
+passenger_id,flight_id,booking_date,status
+1,1,2025-03-05,Confirmed
+2,2,2025-03-07,Pending
+3,3,2025-03-09,Cancelled
+4,4,2025-03-11,Confirmed

@@ -1,0 +1,5 @@
+booking_id,ticket_number,seat_number,price,class
+1,TCK1001,12A,5000,Economy
+2,TCK1002,15C,7200,Business
+3,TCK1003,20B,3500,Economy
+4,TCK1004,10A,6000,Premium
