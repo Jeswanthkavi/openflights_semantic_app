@@ -186,6 +186,8 @@ INSERT INTO tickets (booking_id, ticket_number, issue_date, price, class)
 VALUES (1, 'AI-2025-001', '2025-10-09 09:00:00', 405.93, 'Economy');
 _______________________________________________________________
 
+❕The data loading and embedding for flights in a single file (flights.py) in openflights/main/flights.py
+  
 7️⃣ Generate Embeddings
 cd openflights
 python main.py
