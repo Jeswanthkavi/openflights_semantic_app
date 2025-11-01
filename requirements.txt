@@ -12,14 +12,25 @@ flask-cors                # Enables cross-origin requests (for frontend-backend 
 # ---- 🧠 Database Connector ----
 mariadb                   # For connecting and executing queries in MariaDB database
 
+# ---- 🧠 Database Connector ----
+mysql-connector-python     # Alternative connector for MySQL/MariaDB
+
 # ---- 🤖 NLP & AI Models ----
 sentence-transformers     # Pre-trained transformer models for semantic embeddings
 
 # ---- 📊 Data Processing ----
 pandas                    # Data handling and CSV processing utilities
+numpy                      # For numerical operations and vector handling
+
 
 # ---- ⚙️ Environment Configuration ----
 python-dotenv             # For managing environment variables securely
+
+# ---- Utilities ----
+tqdm                        # Progress bars for embedding tasks
+json5                       # For flexible JSON encoding/decoding
+
+
 
 ##############################################
 # 💡 Setup Instructions
