@@ -1,202 +1,161 @@
+"""
+OpenFlights Semantic Embedding Project
+--------------------------------------
+This script connects to a MariaDB database, loads data from the OpenFlights dataset,
+and generates semantic embeddings using the SentenceTransformer model.
+Embeddings are stored in JSON or vector format inside MariaDB.
+
+Author: Om Prakash Sekar
+Database: openflights_semantic
+Language: Python 3.x
+Dependencies: mariadb, mysql-connector-python, pandas, sentence-transformers
+"""
+
 import mariadb
-import sys
-
-# --- Database Connection Configuration ---
-DB_CONFIG = {
-    "user": "root",         # change if needed
-    "password": "root1",     # change to your password
-    "host": "localhost",    # or 127.0.0.1
-    "port": 3308,           # check in HeidiSQL if different
-    "database": "openflights_semantic"  # we’ll create this next
-}
-
-try:
-    print("🔄 Connecting to MariaDB...")
-    conn = mariadb.connect(**DB_CONFIG)
-    print("✅ Successfully connected to MariaDB!")
-    
-    # --- Create a cursor object ---
-    cur = conn.cursor()
-    
-    # --- Example query ---
-    cur.execute("SELECT VERSION()")
-    version = cur.fetchone()
-    print(f"🧠 MariaDB version: {version[0]}")
-
-    # --- Close connection ---
-    conn.close()
-    print("🔒 Connection closed successfully.")
-
-except mariadb.Error as e:
-    print(f"❌ Error connecting to MariaDB: {e}")
-    sys.exit(1)
-import pandas as pd
-
-df = pd.read_csv(r"C:\Users\Om Prakash Sekar\Desktop\OpenFlights_semantic\data\airports.csv")
-print(df.head())
-print(f"Total rows: {len(df)}")
-
-
-from sentence_transformers import SentenceTransformer
 import mysql.connector
+import pandas as pd
 import json
 import time
+import sys
+from sentence_transformers import SentenceTransformer
 
-# --- Model ---
-print("🧠 Loading model...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
+# -----------------------------
+# 1️⃣ DATABASE CONFIGURATION
+# -----------------------------
+DB_CONFIG = {
+    "user": "root",          # Change if needed
+    "password": "root1",     # Your MariaDB password
+    "host": "localhost",
+    "port": 3308,            # Adjust if MariaDB uses a different port
+    "database": "openflights_semantic"
+}
 
-# Connect to MariaDB
-conn = mysql.connector.connect(
-    host='localhost',
-    user='root',
-    password='root1',
-    database='openflights_semantic',
-    port=3308
-)
-cursor = conn.cursor()
+# -----------------------------
+# 2️⃣ CONNECT TO DATABASE
+# -----------------------------
+def connect_db():
+    try:
+        print("🔄 Connecting to MariaDB...")
+        conn = mariadb.connect(**DB_CONFIG)
+        print("✅ Successfully connected to MariaDB!")
+        return conn
+    except mariadb.Error as e:
+        print(f"❌ Database connection failed: {e}")
+        sys.exit(1)
 
+# -----------------------------
+# 3️⃣ LOAD SAMPLE CSV (OPTIONAL)
+# -----------------------------
+def preview_csv():
+    try:
+        df = pd.read_csv(r"C:\Users\Om Prakash Sekar\Desktop\OpenFlights_semantic\data\airports.csv")
+        print(df.head())
+        print(f"📊 Total rows: {len(df)}")
+    except Exception as e:
+        print(f"⚠️ CSV Preview Error: {e}")
 
-# --- Embed All Airports ---
-cursor.execute("""
-    SELECT id, name, city, country 
-    FROM airports 
-    WHERE embedding IS NULL
-""")
-airports = cursor.fetchall()
+# -----------------------------
+# 4️⃣ INITIALIZE MODEL
+# -----------------------------
+def load_model():
+    print("🧠 Loading sentence transformer model...")
+    return SentenceTransformer('all-MiniLM-L6-v2')
 
-print(f"Embedding {len(airports)} airports...")
-for airport in airports:
-    airport_id, name, city, country = airport
-    text = f"{name}, {city}, {country}"
-    embedding = model.encode(text).tolist()
-    cursor.execute("""
-        UPDATE airports 
-        SET embedding = %s 
-        WHERE id = %s
-    """, (json.dumps(embedding), airport_id))
-    time.sleep(0.01)  # Optional: slow down to avoid overload
+# -----------------------------
+# 5️⃣ GENERIC EMBEDDING FUNCTION
+# -----------------------------
+def generate_embeddings(cursor, query, update_query, text_formatter):
+    cursor.execute(query)
+    records = cursor.fetchall()
+    print(f"📦 {len(records)} records found.")
 
-# --- Embed All Routes ---
-cursor.execute("""
-    SELECT id, source_airport, dest_airport, airline 
-    FROM routes 
-    WHERE embedding IS NULL
-""")
-routes = cursor.fetchall()
+    for record in records:
+        text = text_formatter(record)
+        embedding = model.encode(text).tolist()
+        embedding_json = json.dumps(embedding)
+        cursor.execute(update_query, (embedding_json, record[0]))
+        time.sleep(0.01)
 
-print(f"Embedding {len(routes)} routes...")
-for route in routes:
-    route_id, source, dest, airline = route
-    text = f"{airline} from {source} to {dest}"
-    embedding = model.encode(text).tolist()
-    cursor.execute("""
-        UPDATE routes 
-        SET embedding = %s 
-        WHERE id = %s
-    """, (json.dumps(embedding), route_id))
-    time.sleep(0.01)
+# -----------------------------
+# 6️⃣ MAIN EXECUTION LOGIC
+# -----------------------------
+if __name__ == "__main__":
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    model = load_model()
 
-# Finalize
-conn.commit()
-cursor.close()
-conn.close()
-print("✅ All embeddings updated.")
+    # 6.1 --- AIRPORTS ---
+    print("\n✈️ Embedding airports...")
+    generate_embeddings(
+        cursor,
+        "SELECT id, name, city, country FROM airports WHERE embedding IS NULL",
+        "UPDATE airports SET embedding = %s WHERE id = %s",
+        lambda r: f"{r[1]}, {r[2]}, {r[3]}"
+    )
+    conn.commit()
 
-# --- Embed All Airlines ---
-cursor.execute("""
-    SELECT id, name, country, callsign
-    FROM airlines
-    WHERE embedding_vec IS NULL
-""")
-airlines = cursor.fetchall()
+    # 6.2 --- ROUTES ---
+    print("\n🗺️ Embedding routes...")
+    generate_embeddings(
+        cursor,
+        "SELECT id, source_airport, dest_airport, airline FROM routes WHERE embedding IS NULL",
+        "UPDATE routes SET embedding = %s WHERE id = %s",
+        lambda r: f"{r[3]} from {r[1]} to {r[2]}"
+    )
+    conn.commit()
 
-print(f"Embedding {len(airlines)} airlines...")
-for airline in airlines:
-    airline_id, name, country, callsign = airline
-    text = f"{name}, {country}, {callsign}"
-    embedding = model.encode(text).tolist()
-    embedding_str = json.dumps(embedding)
+    # 6.3 --- AIRLINES ---
+    print("\n🛫 Embedding airlines...")
+    generate_embeddings(
+        cursor,
+        "SELECT id, name, country, callsign FROM airlines WHERE embedding_vec IS NULL",
+        "UPDATE airlines SET embedding_vec = VEC_FROMTEXT(%s) WHERE id = %s",
+        lambda r: f"{r[1]}, {r[2]}, {r[3]}"
+    )
+    conn.commit()
 
-    cursor.execute("""
-        UPDATE airlines
-        SET embedding_vec = VEC_FROMTEXT(%s)
-        WHERE id = %s
-    """, (embedding_str, airline_id))
-    time.sleep(0.01)  # Optional: throttle updates
+    # 6.4 --- PASSENGERS ---
+    print("\n🧍 Embedding passengers...")
+    generate_embeddings(
+        cursor,
+        "SELECT id, name, email, phone, nationality FROM passengers WHERE embedding_vec IS NULL",
+        "UPDATE passengers SET embedding_vec = VEC_FROMTEXT(%s) WHERE id = %s",
+        lambda r: f"Passenger {r[1]}, email {r[2]}, phone {r[3]}, nationality {r[4]}"
+    )
+    conn.commit()
 
-# Finalize
-conn.commit()
-cursor.close()
-conn.close()
-print("✅ Airline embeddings updated successfully.")
+    # 6.5 --- BOOKINGS ---
+    print("\n📘 Embedding bookings...")
+    generate_embeddings(
+        cursor,
+        """
+        SELECT b.id, p.name, b.seat_number, b.status, f.flight_number
+        FROM bookings b
+        JOIN passengers p ON b.passenger_id = p.id
+        JOIN flights f ON b.flight_id = f.id
+        WHERE b.embedding_vec IS NULL
+        """,
+        "UPDATE bookings SET embedding_vec = VEC_FROMTEXT(%s) WHERE id = %s",
+        lambda r: f"Booking for {r[1]} on flight {r[4]}, seat {r[2]}, status {r[3]}"
+    )
+    conn.commit()
 
+    # 6.6 --- TICKETS ---
+    print("\n🎟️ Embedding tickets...")
+    generate_embeddings(
+        cursor,
+        """
+        SELECT t.id, t.ticket_number, t.class, t.price, b.status, p.name
+        FROM tickets t
+        JOIN bookings b ON t.booking_id = b.id
+        JOIN passengers p ON b.passenger_id = p.id
+        WHERE t.embedding_vec IS NULL
+        """,
+        "UPDATE tickets SET embedding_vec = VEC_FROMTEXT(%s) WHERE id = %s",
+        lambda r: f"Ticket {r[1]}, passenger {r[5]}, class {r[2]}, booking status {r[4]}, price {r[3]}"
+    )
+    conn.commit()
 
-# --- Fetch passengers ---
-cur.execute("SELECT id, name, email, phone, nationality FROM passengers;")
-rows = cur.fetchall()
-print(f"📦 {len(rows)} passengers found.")
-
-# --- Generate embeddings ---
-for r in rows:
-    pid, name, email, phone, nat = r
-    text = f"Passenger {name}, email {email}, phone {phone}, nationality {nat}"
-    emb = model.encode(text)
-    emb_txt = json.dumps(emb.tolist())  # ✅ JSON array format
-
-    cur.execute("UPDATE passengers SET embedding_vec = VEC_FROMTEXT(?) WHERE id = ?", (emb_txt, pid))
-
-conn.commit()
-cur.close()
-conn.close()
-print("✅ Passenger embeddings saved.")
-
-# ---------------------------
-# 2️⃣ BOOKINGS
-# ---------------------------
-print("\n📘 Generating embeddings for bookings...")
-cur.execute("""
-SELECT b.id, p.name, b.seat_number, b.status, f.flight_number
-FROM bookings b
-JOIN passengers p ON b.passenger_id = p.id
-JOIN flights f ON b.flight_id = f.id;
-""")
-rows = cur.fetchall()
-print(f"📦 {len(rows)} bookings found.")
-
-for row in rows:
-    bid, pname, seat, status, flight = row
-    text = f"Booking for {pname} on flight {flight}, seat {seat}, status {status}"
-    embedding = model.encode(text)
-    emb_txt = json.dumps(embedding.tolist())  # ✅ Proper JSON array
-
-    cur.execute("UPDATE bookings SET embedding_vec = VEC_FROMTEXT(?) WHERE id = ?", (emb_txt, bid))
-
-conn.commit()
-print("✅ Bookings embeddings saved.")
-
-# ---------------------------
-# 3️⃣ TICKETS
-# ---------------------------
-print("\n🎟️ Generating embeddings for tickets...")
-cur.execute("""
-SELECT t.id, t.ticket_number, t.class, t.price, b.status, p.name
-FROM tickets t
-JOIN bookings b ON t.booking_id = b.id
-JOIN passengers p ON b.passenger_id = p.id;
-""")
-rows = cur.fetchall()
-print(f"📦 {len(rows)} tickets found.")
-
-for row in rows:
-    tid, tnum, tclass, price, bstatus, pname = row
-    text = f"Ticket {tnum}, passenger {pname}, class {tclass}, booking status {bstatus}, price {price}"
-    embedding = model.encode(text)
-    emb_txt = json.dumps(embedding.tolist())  # ✅ Proper JSON array
-
-    cur.execute("UPDATE tickets SET embedding_vec = VEC_FROMTEXT(?) WHERE id = ?", (emb_txt, tid))
-
-conn.commit()
-cur.close()
-conn.close()
-print("\n✅ All embeddings generated successfully!")
+    cursor.close()
+    conn.close()
+    print("\n✅ All embeddings generated successfully!")
